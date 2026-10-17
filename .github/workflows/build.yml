@@ -1,0 +1,65 @@
+name: Build Math Duel
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack project
+        run: unzip -q -o "$(ls *.zip | head -n 1)" -d src
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Prepare Android project
+        working-directory: src/math_duel
+        run: |
+          cp -r lib /tmp/lib_bak && cp pubspec.yaml /tmp/pubspec_bak.yaml
+          flutter create . --project-name math_duel --org ru.mathduel --platforms=android
+          rm -rf lib test && cp -r /tmp/lib_bak lib && cp /tmp/pubspec_bak.yaml pubspec.yaml
+          python3 tool/patch_platform.py android
+      - name: Build APK
+        working-directory: src/math_duel
+        run: |
+          flutter pub get
+          flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MathDuel-Android-APK
+          path: src/math_duel/build/app/outputs/flutter-apk/app-release.apk
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack project
+        run: unzip -q -o "$(ls *.zip | head -n 1)" -d src
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Prepare iOS project
+        working-directory: src/math_duel
+        run: |
+          cp -r lib /tmp/lib_bak && cp pubspec.yaml /tmp/pubspec_bak.yaml
+          flutter create . --project-name math_duel --org ru.mathduel --platforms=ios
+          rm -rf lib test && cp -r /tmp/lib_bak lib && cp /tmp/pubspec_bak.yaml pubspec.yaml
+          python3 tool/patch_platform.py ios
+      - name: Build iOS (unsigned)
+        working-directory: src/math_duel
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry MathDuel-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MathDuel-iOS-unsigned-IPA
+          path: src/math_duel/MathDuel-unsigned.ipa
